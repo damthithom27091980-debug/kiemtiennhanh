@@ -1,0 +1,45 @@
+RewriteEngine On
+
+# 1. Tự động chuyển hướng sang HTTPS
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# 3. TÀI KHOẢN & XÁC THỰC
+RewriteRule ^gioi-thieu$ /client/gioi-thieu.php [QSA,L]
+RewriteRule ^profile$ /client/profile.php [QSA,L]
+RewriteRule ^dang-ky$ /reg.php [QSA,L]
+RewriteRule ^dang-nhap$ /login.php [QSA,L]
+RewriteRule ^reset-pass$ /quen-mat-khau.php [QSA,L]
+RewriteRule ^dang-xuat$ /client/logout.php [QSA,L]
+
+# 4. không sửa 
+RewriteRule ^rut-tien$ /client/napbank.php [QSA,L]
+RewriteRule ^rut-the$ /client/rut-the.php [QSA,L]
+RewriteRule ^rut-vi-dien-tu$ /client/rut-vi-dien-tu.php [QSA,L]
+RewriteRule ^giftcode$ /client/giftcode.php [QSA,L]
+RewriteRule ^nap-game$ /client/nap-game.php [QSA,L]
+RewriteRule ^rut-usdt$ /client/rut-usdt.php [QSA,L]
+
+# 7. CHÍNH SÁCH
+RewriteRule ^chinh-sach$ /client/chinhsach.php [QSA,L]
+RewriteRule ^diem-danh$ /client/diem-danh.php [QSA,L]
+
+# 8. NHIỆM VỤ KIẾM TIỀN & NHẬN THƯỞNG
+RewriteRule ^nhiem-vu$ /client/nhiem-vu.php [QSA,L]
+RewriteRule ^lam-nhiem-vu$ /client/lam-nv.php [QSA,L]
+RewriteRule ^lam-nhiem-vu/([0-9]+)$ /client/lam-nv.php?id=$1&page=1 [QSA,L]
+RewriteRule ^lam-nhiem-vu/([0-9]+)/([0-9]+)$ /client/lam-nv.php?id=$1&page=$2 [QSA,L]
+RewriteRule ^nhan-thuong$ /client/nhan-thuong.php [QSA,L]
+RewriteRule ^list-nv$ /client/list-nv.php [QSA,L]
+RewriteRule ^nhiem-vu-taskvn$ /client/lam-taskvn.php [QSA,L]
+
+# Cấu hình để không bị lỗi khi truy cập các file/thư mục thực tế
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [QSA,L]
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “alt-php74” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-alt-php74___lsphp .php .php7 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

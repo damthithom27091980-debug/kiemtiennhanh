@@ -1,0 +1,346 @@
+CREATE TABLE IF NOT EXISTS `lich_su_rut_vi` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(255) NOT NULL,
+  `trans_id` VARCHAR(50) NOT NULL,
+  `wallet_name` VARCHAR(50) NOT NULL,
+  `sdt_vi` VARCHAR(20) NOT NULL,
+  `ten_chuyentu` VARCHAR(255) NOT NULL,
+  `amount` INT(11) NOT NULL,
+  `time` VARCHAR(50) NOT NULL,
+  `status` INT(11) NOT NULL DEFAULT 0 COMMENT '0: Chờ duyệt, 1: Thành công, 2: Đã hủy',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `lich_su_rut_usdt` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(255) NOT NULL,
+  `trans_id` VARCHAR(50) NOT NULL,
+  `mang_luoi` VARCHAR(50) NOT NULL COMMENT 'TRC20, ERC20 hoặc BEP20',
+  `diachi_usdt` VARCHAR(255) NOT NULL,
+  `amount_usdt` DECIMAL(18,2) NOT NULL,
+  `rate` DECIMAL(18,2) NOT NULL COMMENT 'Tỷ giá tại thời điểm rút',
+  `amount_vnd` INT(11) NOT NULL COMMENT 'Tổng tiền VNĐ bị trừ (gồm cả phí)',
+  `time` VARCHAR(50) NOT NULL,
+  `status` INT(11) NOT NULL DEFAULT 0 COMMENT '0: Chờ duyệt, 1: Thành công, 2: Đã hủy (Hoàn tiền)',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `site_config` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `config_key` VARCHAR(50) NOT NULL,
+  `config_value` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Thêm giá trị mặc định ban đầu cho tỷ giá USDT (1 USDT = 25,400 VNĐ)
+INSERT INTO `site_config` (`config_key`, `config_value`) VALUES ('ty_gia_usdt', '25400');
+
+-- 1. Bảng lưu danh sách mã Giftcode
+CREATE TABLE `giftcode` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `code` VARCHAR(50) NOT NULL UNIQUE COMMENT 'Mã giftcode',
+  `money` INT(11) NOT NULL DEFAULT 0 COMMENT 'Số tiền thưởng',
+  `max_uses` INT(11) NOT NULL DEFAULT 1 COMMENT 'Số lượt sử dụng tối đa',
+  `used_count` INT(11) NOT NULL DEFAULT 0 COMMENT 'Số lượt đã sử dụng',
+  `status` INT(1) NOT NULL DEFAULT 1 COMMENT '1: Hoạt động, 0: Tạm tắt',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Ngày tạo'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2. Bảng lưu lịch sử người dùng nhập giftcode
+CREATE TABLE `history_giftcode` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `username` VARCHAR(50) NOT NULL COMMENT 'Tài khoản người dùng',
+  `code` VARCHAR(50) NOT NULL COMMENT 'Mã đã nhập',
+  `money` INT(11) NOT NULL COMMENT 'Số tiền nhận được',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Thời gian nhập'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+
+*
+
+ALTER TABLE `categories` ADD `daily_limit` INT(11) NOT NULL DEFAULT 10 COMMENT 'Hạn mức lượt vượt tối đa mỗi ngày';
+
+
+ALTER TABLE `categories` ADD COLUMN `approve_type` INT DEFAULT 1 COMMENT '1: Duyệt tự động, 0: Chờ duyệt';
+
+
+-- 1. Bảng cấu hình điểm danh (Cho phép Admin chỉnh sửa linh hoạt)
+CREATE TABLE IF NOT EXISTS `settings_diemdanh` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `min_links` int(11) NOT NULL DEFAULT 3,         -- Số link vượt tối thiểu để điểm danh
+  `base_reward` int(11) NOT NULL DEFAULT 1000,    -- Tiền thưởng cơ bản (VNĐ)
+  `percent_increase` int(11) NOT NULL DEFAULT 5,  -- % tăng thưởng qua mỗi ngày liên tiếp
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Chèn dữ liệu mặc định ban đầu vào bảng cấu hình
+INSERT INTO `settings_diemdanh` (`id`, `min_links`, `base_reward`, `percent_increase`) 
+VALUES (1, 3, 1000, 5) ON DUPLICATE KEY UPDATE `id`=`id`;
+
+-- 2. Bảng lưu lịch sử điểm danh (Đã bỏ cột lịch sử rườm rà, tập trung tính toán Streak chính xác)
+CREATE TABLE IF NOT EXISTS `history_diemdanh` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `username` varchar(255) NOT NULL,
+  `reward` int(11) NOT NULL DEFAULT 0,
+  `streak` int(11) NOT NULL DEFAULT 1,
+  `created_date` date NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+
+-- Xóa bảng cũ nếu có (cẩn thận dữ liệu cũ nhé)
+DROP TABLE IF EXISTS `user_milestone_rewards`;
+DROP TABLE IF EXISTS `milestone_tasks`;
+
+-- 1. Bảng cấu hình các mốc nhiệm vụ (Ngày, Tuần, Tháng)
+CREATE TABLE `milestone_tasks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `type` enum('daily','weekly','monthly') NOT NULL COMMENT 'Loại nhiệm vụ: ngày, tuần, tháng',
+  `title` varchar(255) NOT NULL COMMENT 'Tên nhiệm vụ hiển thị',
+  `target_count` int(11) NOT NULL COMMENT 'Số link cần vượt để đạt mốc',
+  `reward` decimal(10,2) NOT NULL COMMENT 'Số tiền thưởng (VNĐ)',
+  `status` tinyint(1) DEFAULT 1 COMMENT '1: Hoạt động, 0: Tạm khóa',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Thêm sẵn dữ liệu mẫu cho bạn dễ hình dung và test luôn
+INSERT INTO `milestone_tasks` (`type`, `title`, `target_count`, `reward`, `status`) VALUES
+-- Nhiệm vụ Ngày
+('daily', 'Chinh phục 5 link ngày', 5, 2000.00, 1),
+('daily', 'Chinh phục 10 link ngày', 10, 5000.00, 1),
+('daily', 'Chinh phục 20 link ngày', 20, 12000.00, 1),
+('daily', 'Chinh phục 50 link ngày', 50, 35000.00, 1),
+
+-- Nhiệm vụ Tuần
+('weekly', 'Tích lũy 30 link tuần', 30, 15000.00, 1),
+('weekly', 'Tích lũy 70 link tuần', 70, 40000.00, 1),
+('weekly', 'Tích lũy 150 link tuần', 150, 100000.00, 1),
+
+-- Nhiệm vụ Tháng
+('monthly', 'Bứt phá 150 link tháng', 150, 80000.00, 1),
+('monthly', 'Bứt phá 300 link tháng', 300, 200000.00, 1),
+('monthly', 'Bứt phá 600 link tháng', 600, 500000.00, 1);
+
+-- 2. Bảng lưu lịch sử người dùng nhận thưởng mốc
+CREATE TABLE `user_milestone_rewards` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) NOT NULL,
+  `milestone_id` int(11) NOT NULL COMMENT 'ID từ bảng milestone_tasks',
+  `milestone_key` varchar(50) NOT NULL COMMENT 'Khóa thời gian: 2026-10-21 (ngày), 2026-W43 (tuần), 2026-10 (tháng)',
+  `reward_coin` decimal(10,2) NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_claimed_unique` (`username`, `milestone_id`, `milestone_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- 1. Bảng lưu danh sách Trò Chơi (Admin dễ dàng thêm/sửa/xóa game)
+CREATE TABLE IF NOT EXISTS `games` (
+    `id` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `game_name` VARCHAR(100) NOT NULL,
+    `slug` VARCHAR(100) NOT NULL,
+    `status` INT(11) NOT NULL DEFAULT 1 -- 1: Hoạt động, 0: Bảo trì/Ẩn
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Thêm sẵn một số game mẫu
+INSERT INTO `games` (`id`, `game_name`, `slug`, `status`) VALUES
+(1, 'Liên Quân Mobile', 'lien-quan', 1),
+(2, 'Free Fire', 'free-fire', 1),
+(3, 'Genshin Impact', 'genshin', 1),
+(4, 'Roblox (Robux)', 'roblox', 1)
+ON DUPLICATE KEY UPDATE `game_name` = VALUES(`game_name`);
+
+-- 2. Bảng lưu danh sách các Gói Nạp của từng game
+CREATE TABLE IF NOT EXISTS `game_packages` (
+    `id` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `game_id` INT(11) NOT NULL,
+    `package_name` VARCHAR(255) NOT NULL,
+    `amount` INT(11) NOT NULL, -- Giá tiền VNĐ
+    `status` INT(11) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Thêm sẵn các gói nạp mẫu
+INSERT INTO `game_packages` (`game_id`, `package_name`, `amount`, `status`) VALUES
+(1, 'Thẻ 20.000đ (Quà cơ bản)', 20000, 1),
+(1, 'Thẻ 50.000đ (Gói phổ thông)', 50000, 1),
+(1, 'Thẻ 100.000đ (Gói thông dụng)', 100000, 1),
+(1, 'Thẻ 200.000đ (Gói cao cấp)', 200000, 1),
+(2, 'Thẻ 20.000đ (Kim Cương)', 20000, 1),
+(2, 'Thẻ 50.000đ (Kim Cương)', 50000, 1),
+(2, 'Thẻ 100.000đ (Kim Cương)', 100000, 1),
+(3, 'Thẻ 50.000đ (Sáng Thế Thạch)', 50000, 1),
+(3, 'Thẻ 100.000đ (Sáng Thế Thạch)', 100000, 1),
+(4, '400 Robux', 50000, 1),
+(4, '800 Robux', 100000, 1)
+ON DUPLICATE KEY UPDATE `package_name` = VALUES(`package_name`);
+
+-- 3. Bảng lịch sử nạp game của thành viên
+CREATE TABLE IF NOT EXISTS `lich_su_nap_game` (
+    `id` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT(11) NOT NULL,
+    `username` VARCHAR(255) NOT NULL,
+    `game_name` VARCHAR(100) NOT NULL,
+    `package_name` VARCHAR(255) NOT NULL,
+    `amount` INT(11) NOT NULL,
+    `uid` VARCHAR(100) NOT NULL,
+    `note` TEXT DEFAULT NULL,
+    `status` INT(11) NOT NULL DEFAULT 0, -- 0: Đang xử lý, 1: Thành công, 2: Thất bại (Hoàn tiền)
+    `time` DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+
+*
+UPDATE `campaigns` 
+SET `target_link` = CONCAT('https://domainban.com/nhan-thuong.php?code=', `secret_token`);
+
+
+
+
+CREATE TABLE IF NOT EXISTS `posts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL COMMENT 'Tiêu đề bài viết / sự kiện',
+  `content` text NOT NULL COMMENT 'Nội dung chi tiết bài viết',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT 'Thời gian đăng',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Thêm các bài viết mẫu có nội dung chi tiết để test
+TRUNCATE TABLE `posts`;
+INSERT INTO `posts` (`id`, `title`, `content`, `created_at`) VALUES
+(1, 'Sự kiện đua top nhận thưởng khủng tháng 10/2026', 'Chào mừng các thành viên! Khi tham gia hoàn thành nhiệm vụ trong tháng 10, bạn sẽ có cơ hội nhận phần thưởng đua top lên đến 2.000.000đ. Thời gian tính từ 01/10 đến 31/10/2026.', '2026-10-24 10:00:00'),
+(2, 'Cập nhật hệ thống nạp tiền tự động 24/7', 'Hệ thống vừa tích hợp thêm cổng thanh toán tự động qua Ngân Hàng và Momo. Tiền sẽ cộng vào tài khoản trong vòng 1-3 giây sau khi chuyển khoản thành công!', '2026-10-23 15:30:00'),
+(3, 'Thông báo bảo trì hệ thống làm nhiệm vụ', 'Hệ thống sẽ tiến hành nâng cấp máy chủ vào lúc 00:00 đêm nay. Thời gian dự kiến kéo dài 30 phút. Rất mong các bạn thông cảm!', '2026-10-22 09:15:00');
+
+
+-- 2. Tạo bảng admin_menu
+CREATE TABLE `admin_menu` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `parent_id` int(11) DEFAULT 0, -- 0 là thư mục cha (gốc), nếu > 0 là ID của thư mục cha chứa nó
+  `label` varchar(255) NOT NULL, -- Tên hiển thị của menu
+  `icon` varchar(100) DEFAULT 'fas fa-circle', -- Mã icon FontAwesome
+  `url` varchar(255) DEFAULT '#', -- Đường dẫn liên kết (ví dụ: index.php hoặc #)
+  `sort_order` int(11) DEFAULT 0, -- Thứ tự sắp xếp
+  `is_hidden` int(1) DEFAULT 0, -- Trạng thái: 0 là Hiện, 1 là Ẩn
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 3. Nạp dữ liệu mẫu ban đầu
+INSERT INTO `admin_menu` (`id`, `parent_id`, `label`, `icon`, `url`, `sort_order`, `is_hidden`) VALUES
+(1, 0, 'TRANG CHỦ', 'fas fa-home', 'index.php', 1, 0),
+(2, 0, 'THÀNH VIÊN', 'fas fa-user-friends', 'thanh-vien.php', 2, 0),
+(3, 0, 'QUẢN LÝ BẢNG TIN', 'fas fa-bullhorn', 'admin_posts.php', 3, 0),
+(4, 0, 'LỊCH SỬ VƯỢT LINK', 'fas fa-history', 'ls-lam-nv.php', 4, 0),
+(5, 0, 'QUẢN LÝ GAME & GÓI', 'fas fa-gamepad', 'admin_games.php', 5, 0),
+(6, 0, 'CẤU HÌNH ĐIỂM DANH', 'fas fa-calendar-check', 'admin_diemdanh.php', 6, 0),
+(7, 0, 'GIFTCODE', 'fas fa-ticket-alt', '#', 7, 0),
+(8, 0, 'QUẢN LÝ NHIỆM VỤ', 'fas fa-trophy', '#', 8, 0),
+(9, 0, 'Nhiệm Vụ', 'fas fa-tasks', 'quan-li-nhiem-vu.php', 9, 0),
+(10, 0, 'Quản Lý API', 'fas fa-network-wired', '#', 10, 0),
+(11, 0, 'Quản Lý Đơn Rút', 'fas fa-credit-card', '#', 11, 0),
+(12, 0, 'CÀI ĐẶT WEBSITE', 'fas fa-cogs', 'cai-dat.php', 12, 0),
+(13, 0, 'ĐĂNG XUẤT', 'fas fa-reply', 'logout.php', 13, 0),
+
+-- Menu con của GIFTCODE (parent_id = 7)
+(14, 7, 'Thêm Giftcode', 'fas fa-circle', 'admin_giftcode.php', 1, 0),
+(15, 7, 'Lịch Sử Nhập Giftcode', 'fas fa-circle', 'admin_history_giftcode.php', 2, 0),
+
+-- Menu con của QUẢN LÝ NHIỆM VỤ (parent_id = 8)
+(16, 8, 'Mốc Nhiệm Vụ', 'fas fa-circle', 'quan-li-milestone.php', 1, 0),
+(17, 8, 'Lịch Sử Nhận Thưởng', 'fas fa-circle', 'quan-li-lich-su-nhan-thuong.php', 2, 0),
+
+-- Menu con của Quản Lý API (parent_id = 10)
+(18, 10, 'Phienchoso', 'fas fa-circle', 'phienchoso.php', 1, 0),
+(19, 10, 'OctoLink', 'fas fa-circle', 'tao-url-auto.php', 2, 0),
+(20, 10, 'TaskDaily', 'fas fa-circle', 'taskdaily.php', 3, 0),
+(21, 10, 'API Từ Khóa', 'fas fa-circle', 'tukhoa.php', 4, 0),
+
+-- Menu con của Quản Lý Đơn Rút (parent_id = 11)
+(22, 11, 'Đơn Rút Ngân Hàng', 'fas fa-circle', 'lsnapbank.php', 1, 0),
+(23, 11, 'Đơn Rút Thẻ Cào', 'fas fa-circle', 'lsrutthe.php', 2, 0),
+(24, 11, 'Đơn Rút Ví Điện Tử', 'fas fa-circle', 'lsrutvi.php', 3, 0),
+(25, 11, 'Đơn Rút USDT', 'fas fa-circle', 'lsrutusdt.php', 4, 0),
+(26, 11, 'Đơn Nạp Game', 'fas fa-circle', 'admin_lich_su_nap.php', 5, 0);
+
+
+
+
+
+-- Bảng 1: Quản lý Nền tảng & Điều kiện nhận thưởng (Dành cho Admin quản lý)
+CREATE TABLE IF NOT EXISTS `ref_platforms` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `platform_code` VARCHAR(50) NOT NULL, -- tiktok, youtube, facebook, telegram, custom...
+  `platform_name` VARCHAR(100) NOT NULL,
+  `content_type` VARCHAR(100) NOT NULL, -- Video ngắn (TikTok/Reels), Video dài (YouTube), Bài viết (Facebook/Blog)
+  `min_duration` INT(11) DEFAULT 0, -- Thời lượng tối thiểu (tính theo giây, vd: 30s, 300s = 5p)
+  `min_views` INT(11) DEFAULT 0, -- Lượt xem tối thiểu (vd: 1000 views)
+  `reward_estimate` VARCHAR(100) DEFAULT 'Xét duyệt', -- Mô tả mức thưởng
+  `note_requirements` TEXT DEFAULT NULL, -- Ghi chú điều kiện cho User thấy
+  `status` TINYINT(1) DEFAULT 1, -- 1: Hoạt động, 0: Tắt
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Thêm dữ liệu mẫu vào bảng platforms
+INSERT INTO `ref_platforms` (`platform_code`, `platform_name`, `content_type`, `min_duration`, `min_views`, `reward_estimate`, `note_requirements`) VALUES
+('youtube', 'YouTube', 'Video dài (Độ dài >= 5 phút)', 300, 500, '20,000đ - 200,000đ', 'Video phải dài tối thiểu 5 phút, có chèn link giới thiệu ở phần mô tả và đạt ít nhất 500 views.'),
+('tiktok', 'TikTok', 'Video ngắn (Độ dài >= 30 giây)', 30, 1000, '10,000đ - 100,000đ', 'Video dài trên 30 giây, hiển thị rõ trang web, đạt tối thiểu 1,000 views và ghim link ref.'),
+('facebook', 'Facebook', 'Bài viết / Post Group', 0, 0, '5,000đ - 50,000đ', 'Bài đăng công khai trên trang cá nhân hoặc các nhóm kiếm tiền Online kèm link giới thiệu.'),
+('telegram', 'Telegram / Social Khác', 'Tin nhắn / Bài đăng channel', 0, 0, '5,000đ - 30,000đ', 'Đăng bài giới thiệu vào các kênh/nhóm Telegram lớn.');
+
+-- Bảng 2: Lịch sử gửi báo cáo quảng cáo của User
+CREATE TABLE IF NOT EXISTS `ref_promotions` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(255) NOT NULL,
+  `platform_id` INT(11) NOT NULL,
+  `platform_name` VARCHAR(100) NOT NULL,
+  `content_type` VARCHAR(100) NOT NULL,
+  `post_link` TEXT NOT NULL,
+  `views_count` INT(11) DEFAULT 0,
+  `status` VARCHAR(50) DEFAULT 'pending', -- pending: chờ duyệt, approved: đã duyệt, rejected: từ chối
+  `reward` DECIMAL(15,2) DEFAULT 0.00,
+  `admin_note` TEXT DEFAULT NULL,
+  `time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;-- Bảng 1: Quản lý Nền tảng & Điều kiện nhận thưởng (Dành cho Admin quản lý)
+CREATE TABLE IF NOT EXISTS `ref_platforms` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `platform_code` VARCHAR(50) NOT NULL, -- tiktok, youtube, facebook, telegram, custom...
+  `platform_name` VARCHAR(100) NOT NULL,
+  `content_type` VARCHAR(100) NOT NULL, -- Video ngắn (TikTok/Reels), Video dài (YouTube), Bài viết (Facebook/Blog)
+  `min_duration` INT(11) DEFAULT 0, -- Thời lượng tối thiểu (tính theo giây, vd: 30s, 300s = 5p)
+  `min_views` INT(11) DEFAULT 0, -- Lượt xem tối thiểu (vd: 1000 views)
+  `reward_estimate` VARCHAR(100) DEFAULT 'Xét duyệt', -- Mô tả mức thưởng
+  `note_requirements` TEXT DEFAULT NULL, -- Ghi chú điều kiện cho User thấy
+  `status` TINYINT(1) DEFAULT 1, -- 1: Hoạt động, 0: Tắt
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Thêm dữ liệu mẫu vào bảng platforms
+INSERT INTO `ref_platforms` (`platform_code`, `platform_name`, `content_type`, `min_duration`, `min_views`, `reward_estimate`, `note_requirements`) VALUES
+('youtube', 'YouTube', 'Video dài (Độ dài >= 5 phút)', 300, 500, '20,000đ - 200,000đ', 'Video phải dài tối thiểu 5 phút, có chèn link giới thiệu ở phần mô tả và đạt ít nhất 500 views.'),
+('tiktok', 'TikTok', 'Video ngắn (Độ dài >= 30 giây)', 30, 1000, '10,000đ - 100,000đ', 'Video dài trên 30 giây, hiển thị rõ trang web, đạt tối thiểu 1,000 views và ghim link ref.'),
+('facebook', 'Facebook', 'Bài viết / Post Group', 0, 0, '5,000đ - 50,000đ', 'Bài đăng công khai trên trang cá nhân hoặc các nhóm kiếm tiền Online kèm link giới thiệu.'),
+('telegram', 'Telegram / Social Khác', 'Tin nhắn / Bài đăng channel', 0, 0, '5,000đ - 30,000đ', 'Đăng bài giới thiệu vào các kênh/nhóm Telegram lớn.');
+
+-- Bảng 2: Lịch sử gửi báo cáo quảng cáo của User
+CREATE TABLE IF NOT EXISTS `ref_promotions` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(255) NOT NULL,
+  `platform_id` INT(11) NOT NULL,
+  `platform_name` VARCHAR(100) NOT NULL,
+  `content_type` VARCHAR(100) NOT NULL,
+  `post_link` TEXT NOT NULL,
+  `views_count` INT(11) DEFAULT 0,
+  `status` VARCHAR(50) DEFAULT 'pending', -- pending: chờ duyệt, approved: đã duyệt, rejected: từ chối
+  `reward` DECIMAL(15,2) DEFAULT 0.00,
+  `admin_note` TEXT DEFAULT NULL,
+  `time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
